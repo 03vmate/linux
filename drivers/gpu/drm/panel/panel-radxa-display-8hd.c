@@ -14,10 +14,11 @@
 #include <linux/gpio/consumer.h>
 #include <linux/delay.h>
 #include <linux/module.h>
-#include <linux/of_device.h>
+#include <linux/of.h>
 #include <linux/regulator/consumer.h>
 
 #define JADARD_JD9365DA_INIT_CMD_LEN	2
+#define MIPI_DSI_MODE_EOT_PACKET	(1 << 9)
 
 struct jadard_jd9365da_init_cmd {
 	u8 data[JADARD_JD9365DA_INIT_CMD_LEN];
