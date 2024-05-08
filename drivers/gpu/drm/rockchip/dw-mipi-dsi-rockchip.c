@@ -204,6 +204,8 @@
 
 #define HIWORD_UPDATE(val, mask)	(val | (mask) << 16)
 
+#define MEDIA_BUS_FMT_RGB888_1X24		0x100a
+
 enum {
 	DW_DSI_USAGE_IDLE,
 	DW_DSI_USAGE_DSI,
