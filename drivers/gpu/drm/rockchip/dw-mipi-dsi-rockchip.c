@@ -263,6 +263,7 @@ struct dw_mipi_dsi_rockchip {
 	struct regmap *grf_regmap;
 	struct clk *pclk;
 	struct clk *pllref_clk;
+	struct clk *hs_clk;
 	struct clk *grf_clk;
 	struct clk *phy_cfg_clk;
 
@@ -523,12 +524,16 @@ static void dw_mipi_dsi_phy_power_on(void *priv_data)
 {
 	struct dw_mipi_dsi_rockchip *dsi = priv_data;
 	int ret;
+	unsigned long rate;
 
 	ret = phy_set_mode(dsi->phy, PHY_MODE_MIPI_DPHY);
 	if (ret) {
 		DRM_DEV_ERROR(dsi->dev, "failed to set phy mode: %d\n", ret);
 		return;
 	}
+
+	rate = clk_round_rate(dsi->hs_clk, dsi->lane_mbps * USEC_PER_SEC);
+	clk_set_rate(dsi->hs_clk, rate);
 
 	phy_configure(dsi->phy, &dsi->phy_opts);
 	phy_power_on(dsi->phy);
@@ -759,6 +764,8 @@ dw_mipi_dsi_encoder_atomic_check(struct drm_encoder *encoder,
 {
 	struct rockchip_crtc_state *s = to_rockchip_crtc_state(crtc_state);
 	struct dw_mipi_dsi_rockchip *dsi = to_dsi(encoder);
+	struct drm_connector *connector = conn_state->connector;
+	struct drm_display_info *info = &connector->display_info;
 
 	switch (dsi->format) {
 	case MIPI_DSI_FMT_RGB888:
@@ -774,6 +781,11 @@ dw_mipi_dsi_encoder_atomic_check(struct drm_encoder *encoder,
 		WARN_ON(1);
 		return -EINVAL;
 	}
+
+	s->bus_flags = info->bus_flags;
+	s->bus_flags &= ~DRM_BUS_FLAG_PIXDATA_DRIVE_NEGEDGE;
+	s->bus_flags |= DRM_BUS_FLAG_PIXDATA_DRIVE_POSEDGE;
+	s->bus_format = MEDIA_BUS_FMT_RGB888_1X24;
 
 	s->output_type = DRM_MODE_CONNECTOR_DSI;
 	if (dsi->slave)
@@ -1222,6 +1234,12 @@ static int dw_mipi_dsi_dphy_power_on(struct phy *phy)
 		return ret;
 	}
 
+	ret = clk_prepare_enable(dsi->hs_clk);
+	if (ret) {
+		DRM_DEV_ERROR(dsi->dev, "Failed to enable hs_clk: %d\n", ret);
+		goto err_pclk;
+	}
+
 	ret = clk_prepare_enable(dsi->pclk);
 	if (ret) {
 		DRM_DEV_ERROR(dsi->dev, "Failed to enable pclk: %d\n", ret);
@@ -1383,6 +1401,13 @@ static int dw_mipi_dsi_rockchip_probe(struct platform_device *pdev)
 	if (IS_ERR(dsi->phy)) {
 		ret = PTR_ERR(dsi->phy);
 		DRM_DEV_ERROR(dev, "failed to get mipi dphy: %d\n", ret);
+		return ret;
+	}
+
+	dsi->hs_clk = devm_clk_get(dev, "hs_clk");
+	if (IS_ERR(dsi->hs_clk)) {
+		ret = PTR_ERR(dsi->hs_clk);
+		DRM_DEV_ERROR(dev, "failed to get hs clock: %d\n", ret);
 		return ret;
 	}
 
